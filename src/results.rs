@@ -6,7 +6,6 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cost::Config;
-use crate::symmetry::{canonical_key, layout_compact_string, mirror_layout};
 use blake3::Hasher;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -53,24 +52,21 @@ impl BestRepo {
     pub fn insert(&mut self, rec: ResultRecord) -> Option<ResultRecord> {
         // Order by rounded milli penalty for stable ordering and canonical tie-breaker
         let milli = (rec.penalty * 1000.0).round() as i64;
-        match self.by_key.get(&rec.canonical) {
-            Some(existing) => {
-                if rec.penalty + 1e-9 >= existing.penalty {
-                    return None;
-                }
-                // Replace existing better record
-                let old_milli = (existing.penalty * 1000.0).round() as i64;
-                self.ordered
-                    .remove(&(old_milli, existing.canonical.clone()));
+        if let Some(existing) = self.by_key.get(&rec.canonical) {
+            if rec.penalty + 1e-9 >= existing.penalty {
+                return None;
             }
-            None => {}
+            // Replace existing better record
+            let old_milli = (existing.penalty * 1000.0).round() as i64;
+            self.ordered
+                .remove(&(old_milli, existing.canonical.clone()));
         }
         self.by_key.insert(rec.canonical.clone(), rec.clone());
         self.ordered.insert((milli, rec.canonical.clone()));
 
         // Evict worst if over capacity
         if self.by_key.len() > self.capacity {
-            if let Some(worst_key) = self.ordered.iter().rev().next().cloned() {
+            if let Some(worst_key) = self.ordered.iter().next_back().cloned() {
                 self.ordered.remove(&worst_key);
                 let (_, canonical) = worst_key;
                 return self.by_key.remove(&canonical);

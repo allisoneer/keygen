@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
-use flume;
 
 use crate::history::HistoryManager;
 use crate::layout_26::Layout;
@@ -123,7 +122,7 @@ pub fn run_parallel(
         let handle = thread::spawn(move || {
             // Use seed to initialize layout differently for each worker
             let mut layout = Layout::alphabetical();
-            layout.shuffle(worker_id as usize * 5 + 3); // Different initial shuffle per worker
+            layout.shuffle(worker_id * 5 + 3); // Different initial shuffle per worker
 
             optimizer.anneal_streaming(layout, num_swaps, seed, stop_flag.clone(), |event| {
                 // Update worker_id in the event
@@ -282,7 +281,7 @@ pub fn run_parallel(
             if let Some(ref dir) = config.persist_dir {
                 let snapshot_path = Path::new(dir).join("best.json");
                 let top_results: Vec<ResultRecord> =
-                    repo.top().into_iter().map(|r| r.clone()).collect();
+                    repo.top().into_iter().cloned().collect();
                 snapshot_best(&snapshot_path, &top_results)?;
 
                 println!("\n--- Progress Update ---");

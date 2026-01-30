@@ -102,7 +102,7 @@ fn main() {
     }
 
     // Read corpus for other commands
-    let corpus_filename = match matches.free.get(0) {
+    let corpus_filename = match matches.free.first() {
         Some(f) => f,
         None => {
             print_usage(progname, opts);
@@ -249,7 +249,7 @@ fn main() {
 
 fn handle_results_command(matches: &getopts::Matches) {
     // Handle results subcommands
-    if matches.free.len() < 1 {
+    if matches.free.is_empty() {
         eprintln!("Error: results command requires a subcommand");
         eprintln!("Available subcommands: show, merge, snapshot, analyze-swaps");
         std::process::exit(1);
@@ -353,8 +353,7 @@ fn handle_results_command(matches: &getopts::Matches) {
 
                     let records = repo
                         .top()
-                        .into_iter()
-                        .map(|r| r.clone())
+                        .into_iter().cloned()
                         .collect::<Vec<_>>();
                     println!("Merged {} unique results", records.len());
 
@@ -362,7 +361,7 @@ fn handle_results_command(matches: &getopts::Matches) {
                     let out_file = out_path.unwrap();
                     let out_path = Path::new(&out_file);
                     if out_path.extension().and_then(|s| s.to_str()) == Some("json") {
-                        match results::snapshot_best(&out_path, &records) {
+                        match results::snapshot_best(out_path, &records) {
                             Ok(_) => println!("Wrote snapshot to {:?}", out_path),
                             Err(e) => {
                                 eprintln!("Error writing output: {}", e);
@@ -372,7 +371,7 @@ fn handle_results_command(matches: &getopts::Matches) {
                     } else {
                         // Write JSONL
                         for rec in &records {
-                            if let Err(e) = results::append_jsonl(&out_path, rec) {
+                            if let Err(e) = results::append_jsonl(out_path, rec) {
                                 eprintln!("Error writing record: {}", e);
                                 std::process::exit(1);
                             }
