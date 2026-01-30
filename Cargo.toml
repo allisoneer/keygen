@@ -2,10 +2,17 @@
 name = "keygen"
 version = "0.1.0"
 authors = ["Xuming Zeng <xsznix@gmail.com>"]
+edition = "2021"
 
 [dependencies]
-rand = "0.3"
+rand = "0.8"
 getopts = "0.2.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+flume = "0.11"
+humantime = "2"
+blake3 = "1"
+num_cpus = "1"
 
 [profile.dev]
 opt-level = 3

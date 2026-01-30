@@ -1,3 +1,24 @@
+# Build artifacts
 target
 output
 experimental
+
+# Claude Code metadata
+/.thoughts-data
+/.thoughts/
+/.claude/settings.local.json
+/.claude/settings.local.json.bak
+/.claude/settings.local.json.malformed.*.bak
+/.claude/agents/
+/.claude/commands/
+
+# Planning and reflection documents (not direct documentation)
+plan*.md
+reflections_*.md
+
+# Generated optimization results
+/results/
+results_*/
+
+# Scratch scripts
+calculate_space.py
