@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
-
 use crate::history::HistoryManager;
 use crate::layout_26::Layout;
 use crate::optimizer::Optimizer;
@@ -280,8 +279,7 @@ pub fn run_parallel(
         if last_flush.elapsed().as_secs() >= config.flush_period_secs {
             if let Some(ref dir) = config.persist_dir {
                 let snapshot_path = Path::new(dir).join("best.json");
-                let top_results: Vec<ResultRecord> =
-                    repo.top().into_iter().cloned().collect();
+                let top_results: Vec<ResultRecord> = repo.top().into_iter().cloned().collect();
                 snapshot_best(&snapshot_path, &top_results)?;
 
                 println!("\n--- Progress Update ---");

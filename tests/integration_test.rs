@@ -14,7 +14,7 @@ fn test_run_par_creates_output() {
 
     // Run the program
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--",
             "run-par",
@@ -77,7 +77,7 @@ fn test_mirror_invariance() {
     .unwrap();
 
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--",
             "run-par",
@@ -95,7 +95,7 @@ fn test_mirror_invariance() {
     assert!(output.status.success());
 
     // Read the best.json and verify penalties match for original and mirror
-    let best_json = fs::read_to_string(&format!("{}/best.json", test_dir)).unwrap();
+    let best_json = fs::read_to_string(format!("{}/best.json", test_dir)).unwrap();
     let results: Vec<serde_json::Value> = serde_json::from_str(&best_json).unwrap();
 
     // Just verify the file is not empty and has expected structure
@@ -136,7 +136,7 @@ fn test_merge_deduplication() {
     fs::write("test_result2.json", result2).unwrap();
 
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--",
             "results",
