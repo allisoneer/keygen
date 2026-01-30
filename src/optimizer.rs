@@ -116,10 +116,15 @@ impl Optimizer {
                 if debug && i % 1000 == 0 && i > 0 {
                     let pct = if chk_window > 0 {
                         100.0 * (rej_window as f64) / (chk_window as f64)
-                    } else { 0.0 };
-                    println!("[constraints] last 1000: {} rejected ({:.1}%), total: {} / {} ({:.1}%)",
-                        rej_window, pct,
-                        rej_total, chk_total,
+                    } else {
+                        0.0
+                    };
+                    println!(
+                        "[constraints] last 1000: {} rejected ({:.1}%), total: {} / {} ({:.1}%)",
+                        rej_window,
+                        pct,
+                        rej_total,
+                        chk_total,
                         100.0 * (rej_total as f64) / (chk_total as f64)
                     );
                     rej_window = 0;

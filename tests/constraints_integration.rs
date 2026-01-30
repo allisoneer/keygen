@@ -1,7 +1,7 @@
-use keygen::layout_26::Layout;
-use keygen::cost::Config;
-use keygen::optimizer::Optimizer;
 use keygen::constraints::Constraints;
+use keygen::cost::Config;
+use keygen::layout_26::Layout;
+use keygen::optimizer::Optimizer;
 
 #[test]
 fn test_backward_compatibility() {
@@ -24,7 +24,10 @@ fn anneal_respects_constraints() {
     let results = opt.anneal(initial, 1, 1, false);
     for (layout, _, _) in results {
         let c = Constraints::with_forbid_same_hand_words(&["you"]);
-        assert!(c.check_layout(&layout), "anneal() returned a violating layout");
+        assert!(
+            c.check_layout(&layout),
+            "anneal() returned a violating layout"
+        );
     }
 }
 
@@ -40,5 +43,8 @@ fn refine_never_returns_violating_layout() {
     assert_eq!(results.len(), 1);
     let (layout, _, _) = &results[0];
     let c = Constraints::with_forbid_same_hand_words(&["you"]);
-    assert!(c.check_layout(layout), "refine() returned a violating layout");
+    assert!(
+        c.check_layout(layout),
+        "refine() returned a violating layout"
+    );
 }

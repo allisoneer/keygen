@@ -41,7 +41,9 @@ impl Constraints {
                 v.push(parsed);
             }
         }
-        Constraints { forbid_same_hand_words: v }
+        Constraints {
+            forbid_same_hand_words: v,
+        }
     }
 
     #[inline]
