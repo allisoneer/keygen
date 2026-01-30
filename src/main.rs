@@ -1,5 +1,6 @@
 // Remove nightly feature requirement
 mod annealing;
+mod constraints;
 mod coordinator;
 mod corpus;
 mod cost;
@@ -144,7 +145,11 @@ fn main() {
 
     // Create optimizer with default config
     let config = cost::Config::default();
-    let opt = optimizer::Optimizer::new(&corpus, config);
+
+    // Hard constraints: MVP forbids "you" on one hand
+    let constraints = constraints::Constraints::with_forbid_same_hand_words(&["you"]);
+
+    let opt = optimizer::Optimizer::new_with_constraints(&corpus, config, constraints);
 
     match command.as_str() {
         "run-par" => {
@@ -351,10 +356,7 @@ fn handle_results_command(matches: &getopts::Matches) {
                         eprintln!("{}", warning);
                     }
 
-                    let records = repo
-                        .top()
-                        .into_iter().cloned()
-                        .collect::<Vec<_>>();
+                    let records = repo.top().into_iter().cloned().collect::<Vec<_>>();
                     println!("Merged {} unique results", records.len());
 
                     // Write output

@@ -3,6 +3,7 @@ use rand::random;
 use std::collections::HashMap;
 
 use crate::annealing;
+use crate::constraints::Constraints;
 use crate::coordinator::WorkerEvent;
 use crate::corpus;
 use crate::cost::{self, Config};
@@ -21,23 +22,38 @@ struct LayoutEntry {
 pub struct Optimizer {
     quartads: HashMap<[u8; 4], usize>,
     config: Config,
-    monograms: [usize; 26], // NEW
-    letters_len: usize,     // NEW
+    monograms: [usize; 26],
+    letters_len: usize,
+    constraints: Constraints,
 }
 
 impl Optimizer {
-    pub fn new(corpus: &str, config: Config) -> Self {
+    /// Create optimizer with explicit constraints.
+    ///
+    /// Use this to add hard constraints that categorically reject layouts.
+    /// Constraints are checked before expensive scoring, improving performance.
+    pub fn new_with_constraints(corpus: &str, config: Config, constraints: Constraints) -> Self {
         let normalized = corpus::normalize(corpus);
         let quartads = corpus::quartads(&normalized);
-        let monograms = corpus::monograms(&normalized); // NEW
-        let letters_len = corpus::letter_count(&normalized); // NEW
-
+        let monograms = corpus::monograms(&normalized);
+        let letters_len = corpus::letter_count(&normalized);
         Optimizer {
             quartads,
             config,
             monograms,
             letters_len,
+            constraints,
         }
+    }
+
+    // Preserve existing API
+    pub fn new(corpus: &str, config: Config) -> Self {
+        Self::new_with_constraints(corpus, config, Constraints::default())
+    }
+
+    #[inline]
+    fn is_layout_valid(&self, layout: &Layout) -> bool {
+        self.constraints.check_layout(layout)
     }
 
     // Accessor methods for coordinator
@@ -80,11 +96,37 @@ impl Optimizer {
             println!("Initial penalty: {}", accepted_penalty);
         }
 
+        let mut rej_total = 0usize;
+        let mut chk_total = 0usize;
+        let mut rej_window = 0usize;
+        let mut chk_window = 0usize;
+
         for i in annealing::get_simulation_range() {
             // Create a new layout by shuffling
             let mut curr_layout = accepted_layout.clone();
             let swaps = random::<usize>() % num_swaps + 1;
             curr_layout.shuffle(swaps);
+
+            // Hard constraints: pre-scoring rejection
+            chk_total += 1;
+            chk_window += 1;
+            if !self.is_layout_valid(&curr_layout) {
+                rej_total += 1;
+                rej_window += 1;
+                if debug && i % 1000 == 0 && i > 0 {
+                    let pct = if chk_window > 0 {
+                        100.0 * (rej_window as f64) / (chk_window as f64)
+                    } else { 0.0 };
+                    println!("[constraints] last 1000: {} rejected ({:.1}%), total: {} / {} ({:.1}%)",
+                        rej_window, pct,
+                        rej_total, chk_total,
+                        100.0 * (rej_total as f64) / (chk_total as f64)
+                    );
+                    rej_window = 0;
+                    chk_window = 0;
+                }
+                continue;
+            }
 
             // Calculate penalty
             let (total_penalty, _) = cost::score_all(
@@ -174,6 +216,12 @@ impl Optimizer {
             let mut curr_layout = accepted_layout.clone();
             let swaps = rand::random::<usize>() % num_swaps + 1;
             curr_layout.shuffle(swaps);
+
+            // Pre-scoring constraints check
+            if !self.is_layout_valid(&curr_layout) {
+                i += 1;
+                continue;
+            }
 
             let (total_penalty, _) = cost::score_all(
                 &self.quartads,
@@ -337,6 +385,11 @@ impl Optimizer {
         best_layouts: &mut Vec<LayoutEntry>,
         top_n: usize,
     ) {
+        // Hard constraints pre-check
+        if !self.is_layout_valid(&layout) {
+            return;
+        }
+
         let (total_penalty, _) = cost::score_all(
             &self.quartads,
             &self.monograms,

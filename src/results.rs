@@ -6,6 +6,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cost::Config;
+use crate::symmetry::{canonical_key, layout_compact_string, mirror_layout};
 use blake3::Hasher;
 
 #[derive(Serialize, Deserialize, Clone)]
