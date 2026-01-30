@@ -51,6 +51,7 @@ pub struct RunnerConfig {
     pub flush_period_secs: u64,
     pub num_swaps: usize,
     pub persist_dir: Option<String>,
+    #[allow(dead_code)] // kept for planned event sampling feature
     pub log_sample_rate: f64,
 }
 

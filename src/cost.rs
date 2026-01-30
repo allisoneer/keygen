@@ -1,8 +1,7 @@
 use crate::geometry::{Finger, Hand, Key, Row};
-use crate::layout_26::{KeyInfo, Layout};
-/// Cost/penalty calculation for 26-key layouts
-use std::collections::HashMap;
+use crate::layout_26::KeyInfo;
 
+/// Cost/penalty calculation for 26-key layouts
 /// Configuration for penalty weights
 #[derive(Clone)]
 pub struct Config {
@@ -68,300 +67,6 @@ impl Default for Config {
 pub struct PenaltyComponent {
     pub name: &'static str,
     pub total: f64,
-}
-
-/// Score all quartads with the given layout and config
-pub fn score_quartads(
-    quartads: &HashMap<[u8; 4], usize>,
-    layout: &Layout,
-    cfg: &Config,
-) -> (f64, Vec<PenaltyComponent>) {
-    let mut total = 0.0;
-    let mut components = vec![
-        PenaltyComponent {
-            name: "base",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "same_finger_bigram",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "same_hand_bigram",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "movement_distance",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "extreme_movement",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "pinky_ring_twist",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "roll_reversal",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "same_hand_4",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "alternating_hand_4",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "roll_out",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "roll_in",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "sandwich_distance",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "twist",
-            total: 0.0,
-        },
-        PenaltyComponent {
-            name: "same_hand_finger_repeat",
-            total: 0.0,
-        },
-    ];
-
-    for (quartad, &count) in quartads {
-        let count = count as f64;
-
-        // Convert quartad codes to KeyInfo
-        let keys: Vec<Option<KeyInfo>> = quartad
-            .iter()
-            .map(|&code| {
-                let letter = (b'a' + code) as char;
-                layout.get_key_info(letter)
-            })
-            .collect();
-
-        // Skip if any key not found (shouldn't happen with valid quartads)
-        if keys.iter().any(|k| k.is_none()) {
-            continue;
-        }
-
-        let keys: Vec<KeyInfo> = keys.into_iter().map(|k| k.unwrap()).collect();
-
-        // Base penalty (all 4 keys)
-        for key in &keys {
-            let penalty = key.base_cost * cfg.base_weight * count;
-            components[0].total += penalty;
-            total += penalty;
-        }
-
-        // Two-key penalties (3 bigrams in quartad)
-        for i in 1..4 {
-            let curr = &keys[i];
-            let prev = &keys[i - 1];
-
-            // Same finger bigram
-            if curr.finger == prev.finger
-                && curr.hand == prev.hand
-                && curr.position != prev.position
-            {
-                let penalty = cfg.same_finger_bigram * count;
-                components[1].total += penalty;
-                total += penalty;
-            }
-
-            // Same hand bigram
-            if curr.hand == prev.hand {
-                let penalty = cfg.same_hand_bigram * count;
-                components[2].total += penalty;
-                total += penalty;
-            }
-
-            // Distance-based movement penalties
-            let distance = keyinfo_distance(curr, prev);
-            if distance > 1.8 {
-                // Only penalize movements beyond diagonal
-                // Base movement penalty scaled by distance
-                let base_penalty = cfg.movement_penalty_base * distance * count;
-                components[3].total += base_penalty;
-                total += base_penalty;
-
-                // Extra penalty for extreme movements
-                if distance > cfg.extreme_movement_threshold {
-                    let extreme_penalty = cfg.extreme_movement_extra * count;
-                    components[4].total += extreme_penalty;
-                    total += extreme_penalty;
-                }
-            }
-
-            // Pinky/ring twist
-            if curr.hand == prev.hand
-                && ((curr.finger == Finger::Ring
-                    && prev.finger == Finger::Pinky
-                    && (curr.row == Row::Home && prev.row == Row::Top
-                        || curr.row == Row::Bottom && prev.row == Row::Top))
-                    || (curr.finger == Finger::Pinky
-                        && prev.finger == Finger::Ring
-                        && (curr.row == Row::Top && prev.row == Row::Home
-                            || curr.row == Row::Top && prev.row == Row::Bottom)))
-            {
-                let penalty = cfg.pinky_ring_twist * count;
-                components[5].total += penalty;
-                total += penalty;
-            }
-
-            // Roll out - reward smooth movements under distance threshold
-            let roll_distance = keyinfo_distance(curr, prev);
-            if curr.hand == prev.hand &&
-   curr.finger != prev.finger &&  // Must be different fingers
-   roll_distance < 1.85 &&  // Smooth movement threshold (includes diagonals)
-   is_roll_out(curr.hand, curr.finger, prev.finger)
-            {
-                let penalty = cfg.roll_out * count;
-                components[9].total += penalty;
-                total += penalty;
-            }
-
-            // Roll in - reward smooth movements under distance threshold
-            if curr.hand == prev.hand &&
-   curr.finger != prev.finger &&  // Must be different fingers
-   roll_distance < 1.85 &&  // Smooth movement threshold (includes diagonals)
-   is_roll_in(curr.hand, curr.finger, prev.finger)
-            {
-                let penalty = cfg.roll_in * count;
-                components[10].total += penalty;
-                total += penalty;
-            }
-        }
-
-        // Three-key penalties
-        if keys.len() >= 3 {
-            // Roll reversal
-            for i in 2..4 {
-                let curr = &keys[i];
-                let prev1 = &keys[i - 1];
-                let prev2 = &keys[i - 2];
-
-                if curr.hand == prev1.hand
-                    && prev1.hand == prev2.hand
-                    && ((curr.finger == Finger::Middle
-                        && prev1.finger == Finger::Pinky
-                        && prev2.finger == Finger::Ring)
-                        || (curr.finger == Finger::Ring
-                            && prev1.finger == Finger::Pinky
-                            && prev2.finger == Finger::Middle))
-                {
-                    let penalty = cfg.roll_reversal * count;
-                    components[6].total += penalty;
-                    total += penalty;
-                }
-
-                // Twist
-                if curr.hand == prev1.hand
-                    && prev1.hand == prev2.hand
-                    && ((curr.row == Row::Top
-                        && prev1.row == Row::Home
-                        && prev2.row == Row::Bottom)
-                        || (curr.row == Row::Bottom
-                            && prev1.row == Row::Home
-                            && prev2.row == Row::Top))
-                    && ((is_roll_out(curr.hand, curr.finger, prev1.finger)
-                        && is_roll_out(prev1.hand, prev1.finger, prev2.finger))
-                        || (is_roll_in(curr.hand, curr.finger, prev1.finger)
-                            && is_roll_in(prev1.hand, prev1.finger, prev2.finger)))
-                {
-                    let penalty = cfg.twist * count;
-                    components[12].total += penalty;
-                    total += penalty;
-                }
-            }
-
-            // Sandwich distance penalty (A-B-A patterns)
-            for i in 2..4 {
-                let curr = &keys[i];
-                let prev2 = &keys[i - 2];
-
-                if curr.hand == prev2.hand {
-                    let sandwich_distance = keyinfo_distance(curr, prev2);
-
-                    // Only penalize significant distances (threshold of 2.0)
-                    if sandwich_distance > 2.0 {
-                        let penalty = cfg.sandwich_distance_penalty * sandwich_distance * count;
-                        components[11].total += penalty;
-                        total += penalty;
-                    }
-                }
-            }
-        }
-
-        // Four-key penalties
-        if keys.len() == 4 {
-            // Same hand 4
-            if keys[0].hand == keys[1].hand
-                && keys[1].hand == keys[2].hand
-                && keys[2].hand == keys[3].hand
-            {
-                let penalty = cfg.same_hand_4 * count;
-                components[7].total += penalty;
-                total += penalty;
-            }
-
-            // Alternating hand 4
-            if keys[0].hand != keys[1].hand
-                && keys[1].hand != keys[2].hand
-                && keys[2].hand != keys[3].hand
-            {
-                let penalty = cfg.alternating_hand_4 * count;
-                components[8].total += penalty;
-                total += penalty;
-            }
-
-            // Same hand finger repeat - detect using same finger twice before hand switch
-            let mut left_fingers_seen = Vec::new();
-            let mut right_fingers_seen = Vec::new();
-            let mut penalty_applied = false;
-
-            for key in &keys {
-                if key.hand == Hand::Left {
-                    if left_fingers_seen.contains(&(key.finger, key.position)) {
-                        // Same finger, same position is already handled by same_finger_bigram
-                        continue;
-                    }
-                    if left_fingers_seen.iter().any(|(f, _)| *f == key.finger) && !penalty_applied {
-                        // Same finger, different position on same hand!
-                        let penalty = cfg.same_hand_finger_repeat * count;
-                        components[13].total += penalty;
-                        total += penalty;
-                        penalty_applied = true;
-                    }
-                    left_fingers_seen.push((key.finger, key.position));
-                    right_fingers_seen.clear(); // Other hand resets
-                } else {
-                    if right_fingers_seen.contains(&(key.finger, key.position)) {
-                        continue;
-                    }
-                    if right_fingers_seen.iter().any(|(f, _)| *f == key.finger) && !penalty_applied
-                    {
-                        let penalty = cfg.same_hand_finger_repeat * count;
-                        components[13].total += penalty;
-                        total += penalty;
-                        penalty_applied = true;
-                    }
-                    right_fingers_seen.push((key.finger, key.position));
-                    left_fingers_seen.clear(); // Other hand resets
-                }
-            }
-        }
-    }
-
-    (total, components)
 }
 
 pub fn score_all(
@@ -442,7 +147,7 @@ pub fn score_all(
         name: "broken_roll",
         total: 0.0,
     });
-    let finger_repeat_idx = components.len();
+    let _finger_repeat_idx = components.len();
     components.push(PenaltyComponent {
         name: "same_hand_finger_repeat",
         total: 0.0,
@@ -520,16 +225,18 @@ pub fn score_all(
                 }
             }
 
-            // Pinky/ring twist
+            // Pinky/ring twist (clarified parentheses)
+            #[allow(clippy::nonminimal_bool)]
+            // explicit parentheses for clarity, not simplification
             if curr.hand == prev.hand
                 && ((curr.finger == Finger::Ring
                     && prev.finger == Finger::Pinky
-                    && (curr.row == Row::Home && prev.row == Row::Top
-                        || curr.row == Row::Bottom && prev.row == Row::Top))
+                    && ((curr.row == Row::Home && prev.row == Row::Top)
+                        || (curr.row == Row::Bottom && prev.row == Row::Top)))
                     || (curr.finger == Finger::Pinky
                         && prev.finger == Finger::Ring
-                        && (curr.row == Row::Top && prev.row == Row::Home
-                            || curr.row == Row::Top && prev.row == Row::Bottom)))
+                        && ((curr.row == Row::Top && prev.row == Row::Home)
+                            || (curr.row == Row::Top && prev.row == Row::Bottom))))
             {
                 let penalty = cfg.pinky_ring_twist * count;
                 components[5].total += penalty;
@@ -698,6 +405,7 @@ pub fn score_all(
     if letters_total > 0 {
         let mut left = 0usize;
         let mut right = 0usize;
+        #[allow(clippy::needless_range_loop)] // clearer than enumerate for letter codes
         for code in 0..26usize {
             let letter = (b'a' + code as u8) as char;
             if let Some(info) = layout.get_key_info(letter) {
@@ -716,18 +424,6 @@ pub fn score_all(
     }
 
     (total, components)
-}
-
-fn is_consecutive_fingers(f1: Finger, f2: Finger) -> bool {
-    matches!(
-        (f1, f2),
-        (Finger::Pinky, Finger::Ring)
-            | (Finger::Ring, Finger::Pinky)
-            | (Finger::Ring, Finger::Middle)
-            | (Finger::Middle, Finger::Ring)
-            | (Finger::Middle, Finger::Index)
-            | (Finger::Index, Finger::Middle)
-    )
 }
 
 fn is_roll_out(hand: Hand, curr: Finger, prev: Finger) -> bool {
@@ -967,6 +663,7 @@ mod tests {
         quartads.insert([0, 4, 0, 4], 20); // aeae
 
         let mut monograms = [0usize; 26];
+        #[allow(clippy::needless_range_loop)]
         for i in 0..8 {
             monograms[i] = 100 + i;
         }

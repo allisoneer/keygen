@@ -13,6 +13,7 @@ impl Layout {
     /// Create a new layout with alphabetical ordering
     pub fn alphabetical() -> Self {
         let mut positions = ['a'; NUM_KEYS];
+        #[allow(clippy::needless_range_loop)] // clearer than enumerate for simple initialization
         for i in 0..NUM_KEYS {
             positions[i] = (b'a' + i as u8) as char;
         }
@@ -90,22 +91,11 @@ impl Layout {
         self.positions.iter().position(|&c| c == letter)
     }
 
-    /// Get letter at position (0-25)
-    pub fn get_letter(&self, position: usize) -> Option<char> {
-        self.positions.get(position).copied()
-    }
-
-    /// Get compact string representation of layout
-    pub fn to_compact_string(&self) -> String {
-        self.positions.iter().collect()
-    }
-
     /// Create a reverse mapping from letter to KeyPress info
     pub fn get_key_info(&self, letter: char) -> Option<KeyInfo> {
         let position = self.get_position(letter)?;
         let key = &GEOMETRY[position];
         Some(KeyInfo {
-            letter,
             position,
             hand: key.hand,
             finger: key.finger,
@@ -116,7 +106,6 @@ impl Layout {
 }
 
 pub struct KeyInfo {
-    pub letter: char,
     pub position: usize,
     pub hand: Hand,
     pub finger: Finger,

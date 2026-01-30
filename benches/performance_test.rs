@@ -21,7 +21,7 @@ fn main() {
         let start = Instant::now();
 
         let output = Command::new("cargo")
-            .args(&[
+            .args([
                 "run",
                 "--release",
                 "--",

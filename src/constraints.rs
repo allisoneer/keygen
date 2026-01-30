@@ -69,6 +69,7 @@ impl Constraints {
 pub fn compute_letter_hands(layout: &Layout) -> [Hand; 26] {
     let mut hands = [Hand::Left; 26];
     // O(26) build: read letter at each position and map to hand
+    #[allow(clippy::needless_range_loop)]
     for pos in 0..NUM_KEYS {
         let letter = layout.positions[pos];
         let idx = (letter as u8 - b'a') as usize;
@@ -78,11 +79,13 @@ pub fn compute_letter_hands(layout: &Layout) -> [Hand; 26] {
 }
 
 impl Word {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Word> {
         let mut codes = Vec::with_capacity(s.len());
         for ch in s.chars() {
             if ch.is_ascii_alphabetic() {
                 let b = ch.to_ascii_lowercase() as u8;
+                #[allow(clippy::manual_is_ascii_check)]
                 if (b'a'..=b'z').contains(&b) {
                     codes.push(b - b'a');
                 }

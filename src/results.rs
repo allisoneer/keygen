@@ -6,7 +6,6 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cost::Config;
-use crate::symmetry::{canonical_key, layout_compact_string, mirror_layout};
 use blake3::Hasher;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -50,6 +49,11 @@ impl BestRepo {
         self.by_key.len()
     }
 
+    #[allow(dead_code)] // part of public API for completeness with len()
+    pub fn is_empty(&self) -> bool {
+        self.by_key.is_empty()
+    }
+
     pub fn insert(&mut self, rec: ResultRecord) -> Option<ResultRecord> {
         // Order by rounded milli penalty for stable ordering and canonical tie-breaker
         let milli = (rec.penalty * 1000.0).round() as i64;
@@ -81,14 +85,6 @@ impl BestRepo {
             .iter()
             .take(self.capacity)
             .map(|(_, k)| self.by_key.get(k).unwrap())
-            .collect()
-    }
-
-    pub fn into_records(mut self) -> Vec<ResultRecord> {
-        self.ordered
-            .into_iter()
-            .take(self.capacity)
-            .filter_map(|(_, k)| self.by_key.remove(&k))
             .collect()
     }
 }
@@ -324,6 +320,7 @@ pub fn print_symmetric_results(
 mod tests {
     use super::*;
     use crate::layout_26::Layout;
+    use crate::symmetry::{canonical_key, layout_compact_string, mirror_layout};
 
     #[test]
     fn test_best_repo_ordering() {

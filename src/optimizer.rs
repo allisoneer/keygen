@@ -47,6 +47,7 @@ impl Optimizer {
     }
 
     // Preserve existing API
+    #[allow(dead_code)] // part of public API, used by library consumers
     pub fn new(corpus: &str, config: Config) -> Self {
         Self::new_with_constraints(corpus, config, Constraints::default())
     }
@@ -208,7 +209,8 @@ impl Optimizer {
         );
         let mut accepted_penalty = initial_penalty / self.letters_len as f64;
         let mut best_penalty = accepted_penalty;
-        let mut best_layout = accepted_layout.clone();
+        // Defer initialization; it will be assigned before any read.
+        let mut best_layout: Layout;
         let mut accepted = 0u64;
 
         let mut i = 1;

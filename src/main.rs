@@ -471,12 +471,12 @@ fn parse_duration(s: &str) -> Option<u64> {
         return None;
     }
 
-    let (num_part, unit) = if s.ends_with('h') {
-        (&s[..s.len() - 1], 'h')
-    } else if s.ends_with('m') {
-        (&s[..s.len() - 1], 'm')
-    } else if s.ends_with('s') {
-        (&s[..s.len() - 1], 's')
+    let (num_part, unit) = if let Some(stripped) = s.strip_suffix('h') {
+        (stripped, 'h')
+    } else if let Some(stripped) = s.strip_suffix('m') {
+        (stripped, 'm')
+    } else if let Some(stripped) = s.strip_suffix('s') {
+        (stripped, 's')
     } else {
         // Default to seconds if no unit
         (s, 's')
