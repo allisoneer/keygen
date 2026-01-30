@@ -12,11 +12,7 @@ pub struct Layout {
 impl Layout {
     /// Create a new layout with alphabetical ordering
     pub fn alphabetical() -> Self {
-        let mut positions = ['a'; NUM_KEYS];
-        #[allow(clippy::needless_range_loop)] // clearer than enumerate for simple initialization
-        for i in 0..NUM_KEYS {
-            positions[i] = (b'a' + i as u8) as char;
-        }
+        let positions = std::array::from_fn(|i| (b'a' + i as u8) as char);
         Layout { positions }
     }
 

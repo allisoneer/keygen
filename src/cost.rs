@@ -231,19 +231,8 @@ pub fn score_all(
                 }
             }
 
-            // Pinky/ring twist (clarified parentheses)
-            #[allow(clippy::nonminimal_bool)]
-            // explicit parentheses for clarity, not simplification
-            if curr.hand == prev.hand
-                && ((curr.finger == Finger::Ring
-                    && prev.finger == Finger::Pinky
-                    && ((curr.row == Row::Home && prev.row == Row::Top)
-                        || (curr.row == Row::Bottom && prev.row == Row::Top)))
-                    || (curr.finger == Finger::Pinky
-                        && prev.finger == Finger::Ring
-                        && ((curr.row == Row::Top && prev.row == Row::Home)
-                            || (curr.row == Row::Top && prev.row == Row::Bottom))))
-            {
+            // Pinky/ring twist
+            if is_pinky_ring_twist(curr, prev) {
                 let penalty = cfg.pinky_ring_twist * count;
                 components[5].total += penalty;
                 total += penalty;
@@ -411,14 +400,13 @@ pub fn score_all(
     if letters_total > 0 {
         let mut left = 0usize;
         let mut right = 0usize;
-        #[allow(clippy::needless_range_loop)] // clearer than enumerate for letter codes
-        for code in 0..26usize {
+        for (code, &freq) in monograms.iter().enumerate() {
             let letter = (b'a' + code as u8) as char;
             if let Some(info) = layout.get_key_info(letter) {
                 if info.hand == Hand::Left {
-                    left += monograms[code];
+                    left += freq;
                 } else {
-                    right += monograms[code];
+                    right += freq;
                 }
             }
         }
@@ -464,6 +452,29 @@ fn is_roll_out(hand: Hand, curr: Finger, prev: Finger) -> bool {
 fn is_roll_in(hand: Hand, curr: Finger, prev: Finger) -> bool {
     // Roll in is the opposite of roll out
     is_roll_out(hand, prev, curr)
+}
+
+fn is_pinky_ring_twist(curr: &KeyInfo, prev: &KeyInfo) -> bool {
+    if curr.hand != prev.hand {
+        return false;
+    }
+    match (prev.finger, curr.finger) {
+        (Finger::Pinky, Finger::Ring) => {
+            // Pinky -> Ring with upward/downward twist
+            matches!(
+                (prev.row, curr.row),
+                (Row::Top, Row::Home) | (Row::Top, Row::Bottom)
+            )
+        }
+        (Finger::Ring, Finger::Pinky) => {
+            // Ring -> Pinky with upward twist
+            matches!(
+                (prev.row, curr.row),
+                (Row::Home, Row::Top) | (Row::Bottom, Row::Top)
+            )
+        }
+        _ => false,
+    }
 }
 
 /// Calculate distance between two KeyInfo structs using their geometry positions
@@ -674,9 +685,8 @@ mod tests {
         quartads.insert([0, 4, 0, 4], 20); // aeae
 
         let mut monograms = [0usize; 26];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..8 {
-            monograms[i] = 100 + i;
+        for (i, m) in monograms.iter_mut().take(8).enumerate() {
+            *m = 100 + i;
         }
         let letters_total = monograms.iter().sum();
 
@@ -711,9 +721,8 @@ mod tests {
         quartads.insert([0, 4, 0, 4], 20);
 
         let mut monograms = [0usize; 26];
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..8 {
-            monograms[i] = 100 + i;
+        for (i, m) in monograms.iter_mut().take(8).enumerate() {
+            *m = 100 + i;
         }
         let letters_total = monograms.iter().sum();
 
@@ -729,5 +738,193 @@ mod tests {
             (penalty1 - penalty2).abs() > 1e-9,
             "With asymmetric roll weights, mirror invariance is not expected"
         );
+    }
+
+    // Helper functions for pinky/ring twist tests
+
+    use crate::geometry::GEOMETRY;
+
+    fn cfg_only_twist(weight: f64) -> Config {
+        Config {
+            base_weight: 0.0,
+            same_finger_bigram: 0.0,
+            same_hand_bigram: 0.0,
+            alt_hand_bigram: 0.0,
+            movement_penalty_base: 0.0,
+            extreme_movement_threshold: 3.5,
+            extreme_movement_extra: 0.0,
+            pinky_ring_twist: weight,
+            roll_reversal: 0.0,
+            same_hand_4: 0.0,
+            alternating_hand_4: 0.0,
+            roll_out: 0.0,
+            roll_in: 0.0,
+            broken_roll: 0.0,
+            sandwich_distance_penalty: 0.0,
+            same_hand_finger_repeat: 0.0,
+            twist: 0.0,
+            // hand balance disabled
+            balance_mild_start: 0.56,
+            balance_moderate_start: 0.58,
+            balance_severe_start: 0.59,
+            balance_mild_weight: 0.0,
+            balance_moderate_weight: 0.0,
+            balance_severe_weight: 0.0,
+            balance_severe_exponent: 3.0,
+        }
+    }
+
+    fn find_pos(hand: Hand, finger: Finger, row: Row) -> Option<usize> {
+        GEOMETRY.iter().enumerate().find_map(|(i, k)| {
+            if k.hand == hand && k.finger == finger && k.row == row {
+                Some(i)
+            } else {
+                None
+            }
+        })
+    }
+
+    fn any_pos_with_hand(other: Hand) -> usize {
+        GEOMETRY
+            .iter()
+            .enumerate()
+            .find(|(_, k)| k.hand == other)
+            .map(|(i, _)| i)
+            .expect("No key found for requested hand")
+    }
+
+    fn code_for_pos(layout: &Layout, pos: usize) -> u8 {
+        let ch = layout.positions[pos];
+        (ch as u8) - b'a'
+    }
+
+    fn score_twist_pair(prev_pos: usize, curr_pos: usize) -> f64 {
+        let layout = Layout::alphabetical();
+        let cfg = cfg_only_twist(1.0);
+
+        // Use a filler on the opposite hand to avoid accidental twist on i=2 or i=3
+        let pair_hand = GEOMETRY[prev_pos].hand;
+        let filler_pos = any_pos_with_hand(match pair_hand {
+            Hand::Left => Hand::Right,
+            Hand::Right => Hand::Left,
+        });
+
+        let q = [
+            code_for_pos(&layout, prev_pos),
+            code_for_pos(&layout, curr_pos),
+            code_for_pos(&layout, filler_pos),
+            code_for_pos(&layout, filler_pos),
+        ];
+
+        let mut quartads = HashMap::new();
+        quartads.insert(q, 1usize);
+
+        let monograms = [0usize; 26];
+        let letters_total = 0usize; // disable balance
+
+        let (total, _comps) = score_all(&quartads, &monograms, letters_total, &layout, &cfg);
+        total
+    }
+
+    #[test]
+    fn test_pinky_ring_twist_positive_cases() {
+        // Case 1: Ring after Pinky, Top -> Home (same hand)
+        for &hand in &[Hand::Left, Hand::Right] {
+            if let (Some(prev), Some(curr)) = (
+                find_pos(hand, Finger::Pinky, Row::Top),
+                find_pos(hand, Finger::Ring, Row::Home),
+            ) {
+                let total = score_twist_pair(prev, curr);
+                assert!(
+                    (total - 1.0).abs() < 1e-9,
+                    "Expected twist penalty for {:?} Top(Pinky)->Home(Ring)",
+                    hand
+                );
+            }
+        }
+
+        // Case 2: Ring after Pinky, Top -> Bottom
+        for &hand in &[Hand::Left, Hand::Right] {
+            if let (Some(prev), Some(curr)) = (
+                find_pos(hand, Finger::Pinky, Row::Top),
+                find_pos(hand, Finger::Ring, Row::Bottom),
+            ) {
+                let total = score_twist_pair(prev, curr);
+                assert!(
+                    (total - 1.0).abs() < 1e-9,
+                    "Expected twist penalty for {:?} Top(Pinky)->Bottom(Ring)",
+                    hand
+                );
+            }
+        }
+
+        // Case 3: Pinky after Ring, Home -> Top
+        for &hand in &[Hand::Left, Hand::Right] {
+            if let (Some(prev), Some(curr)) = (
+                find_pos(hand, Finger::Ring, Row::Home),
+                find_pos(hand, Finger::Pinky, Row::Top),
+            ) {
+                let total = score_twist_pair(prev, curr);
+                assert!(
+                    (total - 1.0).abs() < 1e-9,
+                    "Expected twist penalty for {:?} Home(Ring)->Top(Pinky)",
+                    hand
+                );
+            }
+        }
+
+        // Case 4: Pinky after Ring, Bottom -> Top
+        for &hand in &[Hand::Left, Hand::Right] {
+            if let (Some(prev), Some(curr)) = (
+                find_pos(hand, Finger::Ring, Row::Bottom),
+                find_pos(hand, Finger::Pinky, Row::Top),
+            ) {
+                let total = score_twist_pair(prev, curr);
+                assert!(
+                    (total - 1.0).abs() < 1e-9,
+                    "Expected twist penalty for {:?} Bottom(Ring)->Top(Pinky)",
+                    hand
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_pinky_ring_twist_negative_cases() {
+        // Different hands should not trigger
+        if let (Some(prev_l), Some(curr_r)) = (
+            find_pos(Hand::Left, Finger::Pinky, Row::Top),
+            find_pos(Hand::Right, Finger::Ring, Row::Home),
+        ) {
+            let total = score_twist_pair(prev_l, curr_r);
+            assert!(
+                total.abs() < 1e-9,
+                "Did not expect twist penalty for different hands"
+            );
+        }
+
+        // Wrong row directions (Home -> Top when expecting Top -> Home)
+        if let (Some(prev), Some(curr)) = (
+            find_pos(Hand::Left, Finger::Pinky, Row::Home),
+            find_pos(Hand::Left, Finger::Ring, Row::Top),
+        ) {
+            let total = score_twist_pair(prev, curr);
+            assert!(
+                total.abs() < 1e-9,
+                "Did not expect twist penalty for Home(Pinky)->Top(Ring)"
+            );
+        }
+
+        // Other fingers (Index -> Middle) should not trigger
+        if let (Some(prev), Some(curr)) = (
+            find_pos(Hand::Right, Finger::Index, Row::Top),
+            find_pos(Hand::Right, Finger::Middle, Row::Home),
+        ) {
+            let total = score_twist_pair(prev, curr);
+            assert!(
+                total.abs() < 1e-9,
+                "Did not expect twist penalty for non pinky/ring fingers"
+            );
+        }
     }
 }

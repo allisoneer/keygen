@@ -20,7 +20,7 @@
 //! - Pairwise different-hands: `different_hand_pairs: Vec<(u8, u8)>`
 //! - Position constraints: `fixed_positions: Vec<(u8, usize)>`
 
-use crate::geometry::{Hand, GEOMETRY, NUM_KEYS};
+use crate::geometry::{Hand, GEOMETRY};
 use crate::layout_26::Layout;
 
 #[derive(Clone, Default)]
@@ -28,16 +28,30 @@ pub struct Constraints {
     forbid_same_hand_words: Vec<Word>,
 }
 
+use std::fmt;
+use std::str::FromStr;
+
 #[derive(Clone, Debug)]
 pub struct Word {
     codes: Vec<u8>, // 0..=25
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseWordError;
+
+impl fmt::Display for ParseWordError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "word must contain at least two ASCII letters")
+    }
+}
+
+impl std::error::Error for ParseWordError {}
+
 impl Constraints {
     pub fn with_forbid_same_hand_words<T: AsRef<str>>(words: &[T]) -> Self {
         let mut v = Vec::new();
         for w in words {
-            if let Some(parsed) = Word::from_str(w.as_ref()) {
+            if let Ok(parsed) = w.as_ref().parse::<Word>() {
                 v.push(parsed);
             }
         }
@@ -69,32 +83,28 @@ impl Constraints {
 pub fn compute_letter_hands(layout: &Layout) -> [Hand; 26] {
     let mut hands = [Hand::Left; 26];
     // O(26) build: read letter at each position and map to hand
-    #[allow(clippy::needless_range_loop)]
-    for pos in 0..NUM_KEYS {
-        let letter = layout.positions[pos];
+    for (&letter, key) in layout.positions.iter().zip(GEOMETRY.iter()) {
         let idx = (letter as u8 - b'a') as usize;
-        hands[idx] = GEOMETRY[pos].hand;
+        hands[idx] = key.hand;
     }
     hands
 }
 
-impl Word {
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Word> {
+impl FromStr for Word {
+    type Err = ParseWordError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut codes = Vec::with_capacity(s.len());
         for ch in s.chars() {
             if ch.is_ascii_alphabetic() {
                 let b = ch.to_ascii_lowercase() as u8;
-                #[allow(clippy::manual_is_ascii_check)]
-                if (b'a'..=b'z').contains(&b) {
-                    codes.push(b - b'a');
-                }
+                codes.push(b - b'a');
             }
         }
         if codes.len() < 2 {
-            return None;
+            return Err(ParseWordError);
         }
-        Some(Word { codes })
+        Ok(Word { codes })
     }
 }
 
@@ -105,20 +115,20 @@ mod tests {
 
     #[test]
     fn test_word_parsing_filters_non_letters() {
-        let w = Word::from_str("you!").unwrap();
+        let w: Word = "you!".parse().unwrap();
         assert_eq!(w.codes, vec![24, 14, 20]); // y o u
     }
 
     #[test]
     fn test_word_parsing_lowercase() {
-        let w = Word::from_str("YOU").unwrap();
+        let w: Word = "YOU".parse().unwrap();
         assert_eq!(w.codes, vec![24, 14, 20]);
     }
 
     #[test]
     fn test_single_letter_words_ignored() {
-        assert!(Word::from_str("I").is_none());
-        assert!(Word::from_str("a").is_none());
+        assert!("I".parse::<Word>().is_err());
+        assert!("a".parse::<Word>().is_err());
     }
 
     #[test]
@@ -153,5 +163,15 @@ mod tests {
         layout.swap(14, 8);
         let c = Constraints::with_forbid_same_hand_words(&["you"]);
         assert!(c.check_layout(&layout));
+    }
+
+    #[test]
+    fn test_non_ascii_letters_dropped() {
+        // "mañana" -> "maana" (ñ dropped, leaving m-a-a-n-a)
+        let w: Word = "mañana".parse().unwrap();
+        assert_eq!(w.codes, vec![12, 0, 0, 13, 0]);
+
+        // "ß" has no ASCII letters; less than 2 ASCII letters should fail
+        assert!("ß".parse::<Word>().is_err());
     }
 }
